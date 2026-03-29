@@ -45,24 +45,65 @@ const USERS_TABLE = "VhagarUsers";
 console.log("🚀 Vhagar Unified Backend Booting Up....");
 
 // ==========================================
-// 1. WEBSOCKET RELAY (The "Proximity" Engine)
+// 1. WEBSOCKET RELAY (Authenticated & Bound)
 // ==========================================
-wss.on('connection', (ws, req) => {
-    console.log('[+] New WebSocket client connected!');
+wss.on('connection', async (ws, req) => {
+    try {
+        const urlParams = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+        const token = urlParams.searchParams.get('token');
+        const hardwareId = urlParams.searchParams.get('hwid');
+        const type = urlParams.searchParams.get('type') || 'overlay';
 
-    // Optional: Parse JWT from URL queries if you want to strictly secure the WS tunnel
-    // const url = new URL(req.url, `http://${req.headers.host}`);
-    // const token = url.searchParams.get('token');
+        if (!token) throw new Error("Missing Token");
 
-    ws.on('message', (message) => {
-        wss.clients.forEach((client) => {
-            if (client !== ws && client.readyState === WebSocket.OPEN) {
-                client.send(message);
+        // Validate JWT
+        const decoded = jwt.verify(token, JWT_SECRET);
+        
+        // Anti-Piracy Check: Fetch user to verify hardware binding
+        const getRes = await docClient.send(new GetCommand({ TableName: USERS_TABLE, Key: { email: decoded.email } }));
+        const user = getRes.Item;
+
+        if (!user) throw new Error("User unauthorized");
+
+        // Only enforce hardwareId for the 'overlay' client (Desktop App)
+        if (type === 'overlay' && hardwareId) {
+            if (user.hardwareId && user.hardwareId !== hardwareId) {
+                console.warn(`🛑 License Violation: ${decoded.email} attempted access from unauthorized machine.`);
+                ws.send(JSON.stringify({ error: "Access Denied: Machine mismatch. Please check your Dashboard." }));
+                ws.close(4003, "Machine mismatch");
+                return;
             }
-        });
-    });
 
-    ws.on('close', () => console.log('[-] WebSocket client disconnected.'));
+            // Auto-bind if no hardwareId exists yet
+            if (!user.hardwareId) {
+                await docClient.send(new UpdateCommand({
+                    TableName: USERS_TABLE,
+                    Key: { email: decoded.email },
+                    UpdateExpression: "set hardwareId = :h",
+                    ExpressionAttributeValues: { ":h": hardwareId }
+                }));
+                console.log(`✅ Machine Bound: ${decoded.email} fused to ${hardwareId}`);
+            }
+        }
+
+        console.log(`🔌 [${type}] Authorized: ${decoded.email}`);
+
+        ws.on('message', (message) => {
+            // Echo message to all other authorized clients
+            wss.clients.forEach((client) => {
+                if (client !== ws && client.readyState === WebSocket.OPEN) {
+                    client.send(message);
+                }
+            });
+        });
+
+        ws.on('close', () => console.log(`[-] [${type}] Connection closed for ${decoded.email}`));
+
+    } catch (err) {
+        console.error("⛔ WebSocket Auth Error:", err.message);
+        ws.send(JSON.stringify({ error: "Unauthorized / Connection Terminated" }));
+        ws.close(4001, "Unauthorized");
+    }
 });
 
 // ==========================================

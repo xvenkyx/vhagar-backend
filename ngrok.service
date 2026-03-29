@@ -1,0 +1,13 @@
+[Unit]
+Description=Ngrok Tunnel for Vhagar Unified Backend
+After=network.target docker.service
+
+[Service]
+Type=simple
+User=ubuntu
+ExecStart=/usr/bin/ngrok http --domain=NGROK_DOMAIN_PLACEHOLDER 3000
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
