@@ -24,13 +24,13 @@ jobs:
           script: |
             echo "🚀 Updating Vhagar Unified Backend..."
             
-            # 1. Enter the server's clone of this repo
-            cd ~/ezzi-backend || (git clone git@github.com:YOUR_USERNAME/ezzi-backend.git ~/ezzi-backend && cd ~/ezzi-backend)
-            
-            # 2. Pull latest code
-            git pull origin main || echo "Make sure git has permissions to pull on the instance"
-            
-            # 3. Build and restart container
+            # 1. Clone repo on first run, or pull latest on subsequent runs
+            if [ -d ~/ezzi-backend ]; then
+              cd ~/ezzi-backend && git pull origin main
+            else
+              git clone https://xvenkyx:${{ secrets.GH_PAT }}@github.com/xvenkyx/vhagar-backend.git ~/ezzi-backend
+              cd ~/ezzi-backend
+            fi
             
             # In case Docker isn't installed yet, prompt user in logs
             docker --version || echo "❌ Docker missing. Please install Docker on EC2!"
