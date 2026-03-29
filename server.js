@@ -7,6 +7,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand } = require("@aws-sdk/lib-dynamodb");
+const { EC2Client, StartInstancesCommand, StopInstancesCommand, DescribeInstancesCommand } = require('@aws-sdk/client-ec2');
 
 // --- Configuration ---
 const app = express();
@@ -40,6 +41,7 @@ if (accessKeyId && secretAccessKey) {
 
 const dynamoClient = new DynamoDBClient(dynamoConfig);
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
+const ec2Client = new EC2Client(dynamoConfig);
 const USERS_TABLE = "VhagarUsers";
 
 console.log("🚀 Vhagar Unified Backend Booting Up....");
@@ -196,6 +198,34 @@ app.post('/api/auth/verify', (req, res) => {
     }
 });
 
+
+// --- AWS Infrastructure Management ---
+app.get('/status/:instanceId', async (req, res) => {
+    try {
+        const { instanceId } = req.params;
+        const command = new DescribeInstancesCommand({ InstanceIds: [instanceId] });
+        const data = await ec2Client.send(command).catch(err => { throw new Error(err.message) });
+        const state = data.Reservations[0].Instances[0].State.Name;
+        res.json({ success: true, status: state.charAt(0).toUpperCase() + state.slice(1) });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.post('/action', async (req, res) => {
+    try {
+        const { action, instanceId } = req.body;
+        let command;
+        if (action === 'start') command = new StartInstancesCommand({ InstanceIds: [instanceId] });
+        else if (action === 'stop') command = new StopInstancesCommand({ InstanceIds: [instanceId] });
+        else throw new Error("Unknown action");
+
+        await ec2Client.send(command);
+        res.json({ success: true, message: `Instance ${action}ing` });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
 
 // Health Check
 app.get('/health', (req, res) => res.json({ status: "OK", service: "Vhagar Backend" }));
