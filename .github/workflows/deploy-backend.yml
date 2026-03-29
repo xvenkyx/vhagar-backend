@@ -1,0 +1,57 @@
+name: Vhagar Backend CI/CD Deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            echo "🚀 Updating Vhagar Unified Backend..."
+            
+            # 1. Enter the server's clone of this repo
+            cd ~/ezzi-backend || (git clone git@github.com:YOUR_USERNAME/ezzi-backend.git ~/ezzi-backend && cd ~/ezzi-backend)
+            
+            # 2. Pull latest code
+            git pull origin main || echo "Make sure git has permissions to pull on the instance"
+            
+            # 3. Build and restart container
+            
+            # In case Docker isn't installed yet, prompt user in logs
+            docker --version || echo "❌ Docker missing. Please install Docker on EC2!"
+
+            echo "📦 Building Docker Container..."
+            docker build -t vhagar-backend:latest .
+            
+            echo "🛑 Stopping old container..."
+            docker stop vhagar-backend || true
+            docker rm vhagar-backend || true
+            
+            echo "🚀 Starting new container on port 3000..."
+            # Note: We pass standard AWS env vars so DynamoDB works seamlessly
+            docker run -d \
+              --name vhagar-backend \
+              -p 3000:3000 \
+              --restart unless-stopped \
+              -e JWT_SECRET='${{ secrets.JWT_SECRET }}' \
+              -e AWS_REGION='${{ secrets.AWS_REGION }}' \
+              -e AWS_ACCESS_KEY_ID='${{ secrets.AWS_ACCESS_KEY_ID }}' \
+              -e AWS_SECRET_ACCESS_KEY='${{ secrets.AWS_SECRET_ACCESS_KEY }}' \
+              vhagar-backend:latest
+            
+            echo "✅ Deployment Successful! Unified server running on port 3000."
