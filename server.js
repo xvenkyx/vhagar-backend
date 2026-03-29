@@ -42,7 +42,7 @@ const dynamoClient = new DynamoDBClient(dynamoConfig);
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
 const USERS_TABLE = "VhagarUsers";
 
-console.log("🚀 Vhagar Unified Backend Booting Up...");
+console.log("🚀 Vhagar Unified Backend Booting Up....");
 
 // ==========================================
 // 1. WEBSOCKET RELAY (The "Proximity" Engine)
