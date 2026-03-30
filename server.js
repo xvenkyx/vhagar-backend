@@ -195,8 +195,13 @@ app.post('/api/auth/verify', (req, res) => {
 app.get('/api/admin/users', adminOnly, async (req, res) => {
     try {
         const data = await docClient.send(new ScanCommand({ TableName: USERS_TABLE }));
-        // Clean data: don't send passwords
-        const users = data.Items.map(({ password, ...cleanUser }) => cleanUser);
+        // Clean data: don't send passwords & ensure defaults
+        const users = data.Items.map(({ password, email, role, isPaid, ...rest }) => ({
+            email,
+            role: role || "client",
+            isPaid: (isPaid !== undefined) ? isPaid : (role === 'admin'),
+            ...rest
+        }));
         res.json(users);
     } catch (err) {
         res.status(500).json({ error: "Failed to fetch users" });
