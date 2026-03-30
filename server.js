@@ -180,6 +180,15 @@ app.post('/api/auth/login', async (req, res) => {
     }
 });
 
+app.post('/api/auth/verify', (req, res) => {
+    try {
+        const decoded = jwt.verify(req.body.token, JWT_SECRET);
+        res.json({ valid: true, user: decoded });
+    } catch (e) {
+        res.status(401).json({ valid: false });
+    }
+});
+
 // --- ADMIN CONTROL PANEL ENDPOINTS ---
 
 // List all users
